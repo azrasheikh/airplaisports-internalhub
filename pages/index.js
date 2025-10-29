@@ -6,7 +6,7 @@ import { getActivityLogs, createActivityLog } from '../lib/db/activity';
 import { getVersionHistory, createVersion } from '../lib/db/versions';
 
 export default function CompanyHub() {
-  const [supabase] = useState(() => createClient());
+  const [supabase, setSupabase] = useState(null);
   const [user, setUser] = useState(null);
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -38,15 +38,23 @@ export default function CompanyHub() {
     { type: 'code', label: 'Code', icon: Code, default: { content: '// Code here' } }
   ];
 
-  // Initialize auth and load data
+  // Initialize Supabase client and auth
   useEffect(() => {
+    // Initialize Supabase client only on client-side
+    const client = createClient();
+    if (!client) {
+      setLoading(false);
+      return;
+    }
+    setSupabase(client);
+
     const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
+      const { data: { session } } = await client.auth.getSession();
 
       if (session?.user) {
         setUser(session.user);
-        await loadUserProfile(session.user.id);
-        await loadData();
+        await loadUserProfile(session.user.id, client);
+        await loadData(client);
       }
 
       setLoading(false);
@@ -55,11 +63,11 @@ export default function CompanyHub() {
     initializeAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
       if (session?.user) {
         setUser(session.user);
-        await loadUserProfile(session.user.id);
-        await loadData();
+        await loadUserProfile(session.user.id, client);
+        await loadData(client);
       } else {
         setUser(null);
         setProfile(null);
@@ -71,9 +79,12 @@ export default function CompanyHub() {
     return () => subscription.unsubscribe();
   }, []);
 
-  const loadUserProfile = async (userId) => {
+  const loadUserProfile = async (userId, client) => {
+    const supabaseClient = client || supabase;
+    if (!supabaseClient) return;
+
     try {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseClient
         .from('profiles')
         .select('*')
         .eq('id', userId)
@@ -86,10 +97,13 @@ export default function CompanyHub() {
     }
   };
 
-  const loadData = async () => {
+  const loadData = async (client) => {
+    const supabaseClient = client || supabase;
+    if (!supabaseClient) return;
+
     try {
       // Load pages
-      const pagesData = await getAllPages(supabase);
+      const pagesData = await getAllPages(supabaseClient);
       const pagesMap = {};
       pagesData.forEach(page => {
         pagesMap[page.id] = {
@@ -102,7 +116,7 @@ export default function CompanyHub() {
       setPages(pagesMap);
 
       // Load navigation items
-      const navData = await getNavigationItems(supabase);
+      const navData = await getNavigationItems(supabaseClient);
       setNavItems(navData.map(item => ({
         id: item.id,
         label: item.label,
@@ -110,7 +124,7 @@ export default function CompanyHub() {
       })));
 
       // Load activity logs
-      const logs = await getActivityLogs(supabase);
+      const logs = await getActivityLogs(supabaseClient);
       setActivityLog(logs.map(log => ({
         id: log.id,
         user: log.user_name,
@@ -123,6 +137,8 @@ export default function CompanyHub() {
   };
 
   const loadVersionHistoryForPage = async (pageId) => {
+    if (!supabase) return;
+
     try {
       const versions = await getVersionHistory(supabase, pageId);
       setVersionHistory(prev => ({
@@ -140,6 +156,11 @@ export default function CompanyHub() {
   };
 
   const handleGoogleSignIn = async () => {
+    if (!supabase) {
+      alert('Supabase is not initialized. Please check your environment variables.');
+      return;
+    }
+
     try {
       const { error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
@@ -155,6 +176,8 @@ export default function CompanyHub() {
   };
 
   const handleSignOut = async () => {
+    if (!supabase) return;
+
     try {
       await createActivityLog(supabase, 'Signed out');
       await supabase.auth.signOut();
@@ -164,6 +187,8 @@ export default function CompanyHub() {
   };
 
   const addActivityLog = async (action, pageId = null) => {
+    if (!supabase) return;
+
     try {
       const log = await createActivityLog(supabase, action, pageId);
       if (log) {
@@ -180,6 +205,8 @@ export default function CompanyHub() {
   };
 
   const saveVersion = async (pageId, components) => {
+    if (!supabase) return;
+
     try {
       const version = await createVersion(supabase, pageId, components);
       if (version) {
@@ -199,6 +226,8 @@ export default function CompanyHub() {
   };
 
   const restoreVersion = async (pageId, versionId) => {
+    if (!supabase) return;
+
     const version = versionHistory[pageId]?.find(v => v.id === versionId);
     if (version) {
       try {
@@ -253,6 +282,8 @@ export default function CompanyHub() {
   };
 
   const saveEdit = async () => {
+    if (!supabase) return;
+
     try {
       await saveVersion(editingPage, pages[editingPage].components);
       await updatePage(supabase, editingPage, { components: editComponents });
@@ -302,6 +333,7 @@ export default function CompanyHub() {
   };
 
   const createNewPage = async () => {
+    if (!supabase) return;
     if (!newPageTitle.trim()) return;
     const pageId = newPageTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     if (pages[pageId]) {
