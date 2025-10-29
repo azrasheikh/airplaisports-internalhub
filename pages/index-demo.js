@@ -1,15 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { FileText, Users, Settings, BookOpen, Home, Edit2, Save, X, Search, Type, List, AlertCircle, Code, Plus, ChevronRight, ChevronDown, Play, LogOut, History, Activity, Loader } from 'lucide-react';
-import { createClient } from '../lib/supabase/client';
-import { getAllPages, createPage, updatePage, getNavigationItems, createNavigationItem } from '../lib/db/pages';
-import { getActivityLogs, createActivityLog } from '../lib/db/activity';
-import { getVersionHistory, createVersion } from '../lib/db/versions';
+import React, { useState, useMemo } from 'react';
+import { FileText, Users, Settings, BookOpen, Home, Edit2, Save, X, Search, Type, List, AlertCircle, Code, Plus, ChevronRight, ChevronDown, Play, LogOut, History, Activity } from 'lucide-react';
 
 export default function CompanyHub() {
-  const [supabase] = useState(() => createClient());
   const [user, setUser] = useState(null);
-  const [profile, setProfile] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [showLoginModal, setShowLoginModal] = useState(true);
   const [activePage, setActivePage] = useState('home');
   const [editingPage, setEditingPage] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -21,12 +15,46 @@ export default function CompanyHub() {
   const [newPageParent, setNewPageParent] = useState(null);
   const [expandedPages, setExpandedPages] = useState({});
 
-  const [activityLog, setActivityLog] = useState([]);
+  const [activityLog, setActivityLog] = useState([
+    { id: 1, user: 'John Doe', action: 'Created page "Getting Started"', timestamp: new Date(Date.now() - 3600000) },
+    { id: 2, user: 'Sarah Johnson', action: 'Edited "Documentation"', timestamp: new Date(Date.now() - 7200000) }
+  ]);
+
   const [versionHistory, setVersionHistory] = useState({});
-  const [pages, setPages] = useState({});
+
+  const [pages, setPages] = useState({
+    home: {
+      title: 'Welcome to Airplai Sports Hub',
+      parent: null,
+      components: [
+        { id: 1, type: 'heading', content: 'Welcome to the Team', level: 1 },
+        { id: 2, type: 'text', content: 'This is your central hub for all company documentation, resources, and information.' }
+      ]
+    },
+    gettingStarted: {
+      title: 'Getting Started',
+      parent: null,
+      components: [
+        { id: 1, type: 'heading', content: 'Getting Started Guide', level: 1 }
+      ]
+    },
+    documentation: {
+      title: 'Documentation',
+      parent: null,
+      components: [
+        { id: 1, type: 'heading', content: 'Technical Documentation', level: 1 }
+      ]
+    }
+  });
+
   const [editComponents, setEditComponents] = useState([]);
   const [draggedComponent, setDraggedComponent] = useState(null);
-  const [navItems, setNavItems] = useState([]);
+
+  const [navItems, setNavItems] = useState([
+    { id: 'home', label: 'Home', icon: 'Home' },
+    { id: 'gettingStarted', label: 'Getting Started', icon: 'BookOpen' },
+    { id: 'documentation', label: 'Documentation', icon: 'FileText' }
+  ]);
 
   const iconOptions = { Home, BookOpen, FileText, Users, Settings, AlertCircle, Code, List };
 
@@ -38,184 +66,59 @@ export default function CompanyHub() {
     { type: 'code', label: 'Code', icon: Code, default: { content: '// Code here' } }
   ];
 
-  // Initialize auth and load data
-  useEffect(() => {
-    const initializeAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      if (session?.user) {
-        setUser(session.user);
-        await loadUserProfile(session.user.id);
-        await loadData();
-      }
-
-      setLoading(false);
-    };
-
-    initializeAuth();
-
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (session?.user) {
-        setUser(session.user);
-        await loadUserProfile(session.user.id);
-        await loadData();
-      } else {
-        setUser(null);
-        setProfile(null);
-        setPages({});
-        setNavItems([]);
-      }
+  const handleGoogleSignIn = () => {
+    setUser({
+      id: '1',
+      email: 'user@airplai.com',
+      name: 'Demo User',
+      avatar: 'https://api.dicebear.com/7.x/avataaars/svg?seed=demo',
+      role: 'admin'
     });
-
-    return () => subscription.unsubscribe();
-  }, []);
-
-  const loadUserProfile = async (userId) => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
-
-      if (error) throw error;
-      setProfile(data);
-    } catch (error) {
-      console.error('Error loading profile:', error);
-    }
+    setShowLoginModal(false);
+    addActivityLog('Signed in');
   };
 
-  const loadData = async () => {
-    try {
-      // Load pages
-      const pagesData = await getAllPages(supabase);
-      const pagesMap = {};
-      pagesData.forEach(page => {
-        pagesMap[page.id] = {
-          title: page.title,
-          parent: page.parent_id,
-          icon: page.icon,
-          components: page.components
-        };
-      });
-      setPages(pagesMap);
-
-      // Load navigation items
-      const navData = await getNavigationItems(supabase);
-      setNavItems(navData.map(item => ({
-        id: item.id,
-        label: item.label,
-        icon: item.icon
-      })));
-
-      // Load activity logs
-      const logs = await getActivityLogs(supabase);
-      setActivityLog(logs.map(log => ({
-        id: log.id,
-        user: log.user_name,
-        action: log.action,
-        timestamp: new Date(log.created_at)
-      })));
-    } catch (error) {
-      console.error('Error loading data:', error);
-    }
+  const handleSignOut = () => {
+    addActivityLog('Signed out');
+    setUser(null);
+    setShowLoginModal(true);
   };
 
-  const loadVersionHistoryForPage = async (pageId) => {
-    try {
-      const versions = await getVersionHistory(supabase, pageId);
-      setVersionHistory(prev => ({
-        ...prev,
-        [pageId]: versions.map(v => ({
-          id: v.id,
-          user: v.user_name,
-          timestamp: new Date(v.created_at),
-          components: v.components
-        }))
-      }));
-    } catch (error) {
-      console.error('Error loading version history:', error);
-    }
+  const addActivityLog = (action) => {
+    if (!user && action !== 'Signed in') return;
+    setActivityLog(prev => [{
+      id: Date.now(),
+      user: user?.name || 'Demo User',
+      action: action,
+      timestamp: new Date()
+    }, ...prev]);
   };
 
-  const handleGoogleSignIn = async () => {
-    try {
-      const { error } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}`
-        }
-      });
-      if (error) throw error;
-    } catch (error) {
-      console.error('Error signing in:', error.message);
-      alert('Error signing in: ' + error.message);
-    }
+  const saveVersion = (pageId, components) => {
+    if (!user) return;
+    setVersionHistory(prev => ({
+      ...prev,
+      [pageId]: [{
+        id: Date.now(),
+        user: user.name,
+        timestamp: new Date(),
+        components: JSON.parse(JSON.stringify(components))
+      }, ...(prev[pageId] || [])].slice(0, 10)
+    }));
   };
 
-  const handleSignOut = async () => {
-    try {
-      await createActivityLog(supabase, 'Signed out');
-      await supabase.auth.signOut();
-    } catch (error) {
-      console.error('Error signing out:', error);
-    }
-  };
-
-  const addActivityLog = async (action, pageId = null) => {
-    try {
-      const log = await createActivityLog(supabase, action, pageId);
-      if (log) {
-        setActivityLog(prev => [{
-          id: log.id,
-          user: log.user_name,
-          action: log.action,
-          timestamp: new Date(log.created_at)
-        }, ...prev]);
-      }
-    } catch (error) {
-      console.error('Error adding activity log:', error);
-    }
-  };
-
-  const saveVersion = async (pageId, components) => {
-    try {
-      const version = await createVersion(supabase, pageId, components);
-      if (version) {
-        setVersionHistory(prev => ({
-          ...prev,
-          [pageId]: [{
-            id: version.id,
-            user: version.user_name,
-            timestamp: new Date(version.created_at),
-            components: version.components
-          }, ...(prev[pageId] || [])].slice(0, 10)
-        }));
-      }
-    } catch (error) {
-      console.error('Error saving version:', error);
-    }
-  };
-
-  const restoreVersion = async (pageId, versionId) => {
+  const restoreVersion = (pageId, versionId) => {
     const version = versionHistory[pageId]?.find(v => v.id === versionId);
     if (version) {
-      try {
-        await updatePage(supabase, pageId, { components: version.components });
-        setPages(prev => ({
-          ...prev,
-          [pageId]: {
-            ...prev[pageId],
-            components: JSON.parse(JSON.stringify(version.components))
-          }
-        }));
-        await addActivityLog(`Restored "${pages[pageId].title}" to previous version`, pageId);
-        setShowVersionHistory(false);
-      } catch (error) {
-        console.error('Error restoring version:', error);
-        alert('Error restoring version: ' + error.message);
-      }
+      setPages(prev => ({
+        ...prev,
+        [pageId]: {
+          ...prev[pageId],
+          components: JSON.parse(JSON.stringify(version.components))
+        }
+      }));
+      addActivityLog(`Restored "${pages[pageId].title}" to previous version`);
+      setShowVersionHistory(false);
     }
   };
 
@@ -225,7 +128,7 @@ export default function CompanyHub() {
     const query = searchQuery.toLowerCase();
     Object.entries(pages).forEach(([pageId, page]) => {
       let matches = 0;
-      page.components?.forEach(c => {
+      page.components.forEach(c => {
         const text = c.content || c.items?.join(' ') || '';
         if (text.toLowerCase().includes(query)) matches++;
       });
@@ -243,29 +146,23 @@ export default function CompanyHub() {
   };
 
   const startEditing = (pageId) => {
-    if (!profile || profile.role === 'viewer') {
+    if (!user || user.role === 'viewer') {
       alert('You need edit permissions');
       return;
     }
     setEditingPage(pageId);
     setEditComponents([...pages[pageId].components]);
-    addActivityLog(`Started editing "${pages[pageId].title}"`, pageId);
+    addActivityLog(`Started editing "${pages[pageId].title}"`);
   };
 
-  const saveEdit = async () => {
-    try {
-      await saveVersion(editingPage, pages[editingPage].components);
-      await updatePage(supabase, editingPage, { components: editComponents });
-      setPages(prev => ({
-        ...prev,
-        [editingPage]: { ...prev[editingPage], components: editComponents }
-      }));
-      await addActivityLog(`Saved "${pages[editingPage].title}"`, editingPage);
-      setEditingPage(null);
-    } catch (error) {
-      console.error('Error saving page:', error);
-      alert('Error saving page: ' + error.message);
-    }
+  const saveEdit = () => {
+    saveVersion(editingPage, pages[editingPage].components);
+    setPages({
+      ...pages,
+      [editingPage]: { ...pages[editingPage], components: editComponents }
+    });
+    addActivityLog(`Saved "${pages[editingPage].title}"`);
+    setEditingPage(null);
   };
 
   const cancelEdit = () => {
@@ -301,50 +198,29 @@ export default function CompanyHub() {
     setDraggedComponent(index);
   };
 
-  const createNewPage = async () => {
+  const createNewPage = () => {
     if (!newPageTitle.trim()) return;
     const pageId = newPageTitle.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
     if (pages[pageId]) {
       alert('Page already exists!');
       return;
     }
-
-    try {
-      const newPage = {
-        id: pageId,
+    setPages({
+      ...pages,
+      [pageId]: {
         title: newPageTitle,
         parent: newPageParent,
-        icon: newPageIcon,
         components: [{ id: 1, type: 'heading', content: newPageTitle, level: 1 }]
-      };
-
-      await createPage(supabase, newPage);
-
-      const position = navItems.length + 1;
-      await createNavigationItem(supabase, {
-        id: pageId,
-        label: newPageTitle,
-        icon: newPageIcon,
-        page_id: pageId,
-        position
-      });
-
-      setPages(prev => ({ ...prev, [pageId]: newPage }));
-      setNavItems(prev => [...prev, { id: pageId, label: newPageTitle, icon: newPageIcon }]);
-
-      if (newPageParent) setExpandedPages(prev => ({ ...prev, [newPageParent]: true }));
-
-      await addActivityLog(`Created "${newPageTitle}"`, pageId);
-
-      setNewPageTitle('');
-      setNewPageIcon('FileText');
-      setNewPageParent(null);
-      setShowNewPageModal(false);
-      setActivePage(pageId);
-    } catch (error) {
-      console.error('Error creating page:', error);
-      alert('Error creating page: ' + error.message);
-    }
+      }
+    });
+    setNavItems([...navItems, { id: pageId, label: newPageTitle, icon: newPageIcon }]);
+    if (newPageParent) setExpandedPages(prev => ({ ...prev, [newPageParent]: true }));
+    addActivityLog(`Created "${newPageTitle}"`);
+    setNewPageTitle('');
+    setNewPageIcon('FileText');
+    setNewPageParent(null);
+    setShowNewPageModal(false);
+    setActivePage(pageId);
   };
 
   const renderComponent = (c) => {
@@ -360,7 +236,7 @@ export default function CompanyHub() {
       case 'text':
         return <p className="mb-3 text-gray-300">{c.content}</p>;
       case 'list':
-        return <ul className="mb-3 ml-6 list-disc">{c.items?.map((item, i) => <li key={i} className="mb-1 text-gray-300">{item}</li>)}</ul>;
+        return <ul className="mb-3 ml-6 list-disc">{c.items.map((item, i) => <li key={i} className="mb-1 text-gray-300">{item}</li>)}</ul>;
       case 'alert':
         return (
           <div className="mb-3 p-4 bg-gradient-to-r from-pink-500/20 to-blue-300/20 border-l-4 border-pink-500 rounded">
@@ -401,7 +277,7 @@ export default function CompanyHub() {
             <Icon size={20} />
             <span className="font-medium">{item.label}</span>
           </button>
-          {profile && profile.role !== 'viewer' && (
+          {user && user.role !== 'viewer' && (
             <button onClick={() => { setNewPageParent(item.id); setShowNewPageModal(true); }} className="p-2 text-gray-400 hover:text-blue-300 hover:bg-gray-700/50 rounded">
               <Plus size={16} />
             </button>
@@ -422,22 +298,7 @@ export default function CompanyHub() {
     return `${d}d ago`;
   };
 
-  // Load version history when modal opens
-  useEffect(() => {
-    if (showVersionHistory && activePage) {
-      loadVersionHistoryForPage(activePage);
-    }
-  }, [showVersionHistory, activePage]);
-
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
-        <Loader className="animate-spin text-pink-400" size={48} />
-      </div>
-    );
-  }
-
-  if (!user) {
+  if (showLoginModal) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-black">
         <div className="bg-gray-900 border border-gray-800 rounded-lg shadow-xl p-8 w-full max-w-md">
@@ -457,17 +318,9 @@ export default function CompanyHub() {
             </svg>
             Sign in with Google
           </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!pages[activePage]) {
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-black">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold text-white mb-4">Loading...</h2>
-          <Loader className="animate-spin text-pink-400 mx-auto" size={32} />
+          <div className="mt-6 p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+            <p className="text-sm text-blue-300 text-center"><strong>Demo Mode:</strong> Click to sign in</p>
+          </div>
         </div>
       </div>
     );
@@ -487,10 +340,10 @@ export default function CompanyHub() {
             </div>
           </div>
           <div className="flex items-center gap-2 p-2 bg-gray-800 rounded-lg">
-            <img src={profile?.avatar_url || user.user_metadata?.avatar_url || 'https://api.dicebear.com/7.x/avataaars/svg?seed=default'} alt="" className="w-8 h-8 rounded-full" />
+            <img src={user?.avatar} alt="" className="w-8 h-8 rounded-full" />
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-white truncate">{profile?.name || user.user_metadata?.name || user.email}</p>
-              <p className="text-xs text-gray-400 capitalize">{profile?.role || 'viewer'}</p>
+              <p className="text-sm font-medium text-white truncate">{user?.name}</p>
+              <p className="text-xs text-gray-400 capitalize">{user?.role}</p>
             </div>
             <button onClick={handleSignOut} className="p-1 text-gray-400 hover:text-pink-400">
               <LogOut size={16} />
@@ -517,7 +370,7 @@ export default function CompanyHub() {
 
         <nav className="p-4 flex-1 overflow-y-auto">
           {navItems.filter(i => !pages[i.id]?.parent).map(i => renderNavItem(i))}
-          {profile && profile.role !== 'viewer' && (
+          {user && user.role !== 'viewer' && (
             <button onClick={() => { setNewPageParent(null); setShowNewPageModal(true); }} className="w-full flex items-center gap-3 px-4 py-3 rounded-lg border-2 border-dashed border-gray-700 text-gray-400 hover:border-blue-400 hover:text-blue-300 mt-4">
               <Plus size={20} />
               <span className="font-medium">New Page</span>
@@ -615,7 +468,7 @@ export default function CompanyHub() {
                       )}
                       {c.type === 'list' && (
                         <div className="space-y-2">
-                          {c.items?.map((item, idx) => (
+                          {c.items.map((item, idx) => (
                             <div key={idx} className="flex gap-2">
                               <input type="text" value={item} onChange={(e) => {
                                 const items = [...c.items];
@@ -630,7 +483,7 @@ export default function CompanyHub() {
                               </button>
                             </div>
                           ))}
-                          <button onClick={() => updateComponent(c.id, { items: [...(c.items || []), 'New item'] })} className="text-blue-400 text-sm">+ Add item</button>
+                          <button onClick={() => updateComponent(c.id, { items: [...c.items, 'New item'] })} className="text-blue-400 text-sm">+ Add item</button>
                         </div>
                       )}
                     </div>
@@ -640,7 +493,7 @@ export default function CompanyHub() {
             </div>
           ) : (
             <div className="bg-gray-900 rounded-lg border border-gray-800 p-8">
-              {pages[activePage].components?.map((c, i) => <div key={i}>{renderComponent(c)}</div>)}
+              {pages[activePage].components.map((c, i) => <div key={i}>{renderComponent(c)}</div>)}
             </div>
           )}
         </div>
