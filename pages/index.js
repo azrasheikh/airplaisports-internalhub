@@ -108,18 +108,33 @@ export default function CompanyHub() {
       return;
     }
 
+    console.log('[App] About to query profiles table...');
+
     try {
-      const { data, error } = await supabaseClient
+      const queryPromise = supabaseClient
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
+
+      console.log('[App] Query created, awaiting response...');
+
+      // Add timeout to detect hanging requests
+      const timeoutPromise = new Promise((_, reject) =>
+        setTimeout(() => reject(new Error('Profile query timeout after 10s')), 10000)
+      );
+
+      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
+
+      console.log('[App] Query response received, data:', data, 'error:', error);
 
       if (error) throw error;
       console.log('[App] Profile loaded successfully:', data);
       setProfile(data);
     } catch (error) {
       console.error('[App] Error loading profile:', error);
+      // Set default profile so app doesn't get stuck
+      setProfile({ role: 'viewer', name: 'User', email: user?.email });
     }
   };
 
