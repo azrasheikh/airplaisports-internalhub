@@ -9,44 +9,54 @@ export default function DbTest() {
   useEffect(() => {
     const testDatabase = async () => {
       try {
+        console.log('[DB-Test] Starting database test...');
         setStatus('Creating Supabase client...');
         const supabase = createClient();
 
+        console.log('[DB-Test] Client created:', supabase ? 'SUCCESS' : 'NULL');
+
         if (!supabase) {
-          setError('Failed to create Supabase client');
+          setError('Failed to create Supabase client - check environment variables');
           setStatus('ERROR: No client');
           return;
         }
 
         setStatus('Client created! Testing connection...');
 
-        // Simple direct query with timeout
+        // Test with timeout using Promise.race
         setStatus('Querying pages table...');
+        console.log('[DB-Test] Starting query...');
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 5000);
+        const queryPromise = supabase
+          .from('pages')
+          .select('id, title')
+          .limit(3);
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('Query timeout after 10 seconds')), 10000)
+        );
 
         try {
-          const { data, error: queryError } = await supabase
-            .from('pages')
-            .select('id, title')
-            .limit(3);
+          const { data, error: queryError } = await Promise.race([queryPromise, timeoutPromise]);
 
-          clearTimeout(timeoutId);
+          console.log('[DB-Test] Query completed');
 
           if (queryError) {
+            console.error('[DB-Test] Query error:', queryError);
             setError(queryError.message);
             setStatus('ERROR: Query failed');
           } else {
+            console.log('[DB-Test] Query success, data:', data);
             setResults(data || []);
             setStatus(`SUCCESS! Loaded ${data?.length || 0} pages`);
           }
         } catch (e) {
-          clearTimeout(timeoutId);
+          console.error('[DB-Test] Query timeout or error:', e);
           setError(e.message);
           setStatus('ERROR: Query timeout or failed');
         }
       } catch (e) {
+        console.error('[DB-Test] Test error:', e);
         setError(e.message);
         setStatus('ERROR: ' + e.message);
       }
