@@ -1078,7 +1078,7 @@ INSERT INTO pages (id, title, icon, parent_id, components, created_at, updated_a
 ]'::jsonb, NOW(), NOW());
 
 -- Add navigation items for all documentation pages
-INSERT INTO navigation_items (id, label, icon, page_id, order_index) VALUES
+INSERT INTO navigation_items (id, label, icon, page_id, position) VALUES
 ('nav-project-overview', 'Project Overview', 'BookOpen', 'project-overview', 100),
 ('nav-architecture', 'Architecture & Database', 'Code', 'architecture-database', 101),
 ('nav-troubleshooting', 'Troubleshooting Guide', 'AlertCircle', 'troubleshooting-guide', 102),
