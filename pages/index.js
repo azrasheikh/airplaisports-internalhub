@@ -40,30 +40,51 @@ export default function CompanyHub() {
 
   // Initialize Supabase client and auth
   useEffect(() => {
+    console.log('[App] useEffect starting...');
+
     // Initialize Supabase client only on client-side
     const client = createClient();
+    console.log('[App] Client created:', client ? 'SUCCESS' : 'NULL');
+
     if (!client) {
+      console.log('[App] No client, setting loading to false');
       setLoading(false);
       return;
     }
     setSupabase(client);
 
     const initializeAuth = async () => {
-      const { data: { session } } = await client.auth.getSession();
+      console.log('[App] Initializing auth...');
 
-      if (session?.user) {
-        setUser(session.user);
-        await loadUserProfile(session.user.id, client);
-        await loadData(client);
+      try {
+        const { data: { session } } = await client.auth.getSession();
+        console.log('[App] Session retrieved:', session ? 'HAS SESSION' : 'NO SESSION');
+
+        if (session?.user) {
+          console.log('[App] User found:', session.user.email);
+          setUser(session.user);
+
+          console.log('[App] Loading user profile...');
+          await loadUserProfile(session.user.id, client);
+
+          console.log('[App] Loading data...');
+          await loadData(client);
+        }
+
+        console.log('[App] Setting loading to false');
+        setLoading(false);
+      } catch (error) {
+        console.error('[App] Error in initializeAuth:', error);
+        setLoading(false);
       }
-
-      setLoading(false);
     };
 
     initializeAuth();
 
     // Listen for auth changes
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
+      console.log('[App] Auth state changed:', event, session ? 'HAS SESSION' : 'NO SESSION');
+
       if (session?.user) {
         setUser(session.user);
         await loadUserProfile(session.user.id, client);
@@ -80,8 +101,12 @@ export default function CompanyHub() {
   }, []);
 
   const loadUserProfile = async (userId, client) => {
+    console.log('[App] loadUserProfile called for userId:', userId);
     const supabaseClient = client || supabase;
-    if (!supabaseClient) return;
+    if (!supabaseClient) {
+      console.log('[App] No supabase client in loadUserProfile');
+      return;
+    }
 
     try {
       const { data, error } = await supabaseClient
@@ -91,19 +116,27 @@ export default function CompanyHub() {
         .single();
 
       if (error) throw error;
+      console.log('[App] Profile loaded successfully:', data);
       setProfile(data);
     } catch (error) {
-      console.error('Error loading profile:', error);
+      console.error('[App] Error loading profile:', error);
     }
   };
 
   const loadData = async (client) => {
+    console.log('[App] loadData called');
     const supabaseClient = client || supabase;
-    if (!supabaseClient) return;
+    if (!supabaseClient) {
+      console.log('[App] No supabase client in loadData');
+      return;
+    }
 
     try {
       // Load pages
+      console.log('[App] Loading pages...');
       const pagesData = await getAllPages(supabaseClient);
+      console.log('[App] Pages loaded:', pagesData.length, 'pages');
+
       const pagesMap = {};
       pagesData.forEach(page => {
         pagesMap[page.id] = {
@@ -116,7 +149,10 @@ export default function CompanyHub() {
       setPages(pagesMap);
 
       // Load navigation items
+      console.log('[App] Loading navigation items...');
       const navData = await getNavigationItems(supabaseClient);
+      console.log('[App] Navigation items loaded:', navData.length, 'items');
+
       setNavItems(navData.map(item => ({
         id: item.id,
         label: item.label,
@@ -124,15 +160,20 @@ export default function CompanyHub() {
       })));
 
       // Load activity logs
+      console.log('[App] Loading activity logs...');
       const logs = await getActivityLogs(supabaseClient);
+      console.log('[App] Activity logs loaded:', logs.length, 'logs');
+
       setActivityLog(logs.map(log => ({
         id: log.id,
         user: log.user_name,
         action: log.action,
         timestamp: new Date(log.created_at)
       })));
+
+      console.log('[App] loadData completed successfully');
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('[App] Error loading data:', error);
     }
   };
 
