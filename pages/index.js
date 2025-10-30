@@ -79,6 +79,10 @@ export default function CompanyHub() {
     }
     setSupabase(client);
 
+    // Track if we've loaded profile to avoid duplicate loads
+    let hasLoadedProfile = false;
+    let lastUserId = null;
+
     const initializeAuth = async () => {
       // Ensure loading stops after max 15 seconds no matter what
       const maxLoadTime = setTimeout(() => {
@@ -93,6 +97,7 @@ export default function CompanyHub() {
           setUser(session.user);
           await loadUserProfile(session.user.id, client);
           await loadData(client);
+          hasLoadedProfile = true; // Mark that we've loaded profile
         }
 
         clearTimeout(maxLoadTime);
@@ -107,27 +112,34 @@ export default function CompanyHub() {
     initializeAuth();
 
     // Listen for auth changes (but avoid duplicate loads)
-    let lastUserId = null;
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
       // Only reload if user changed or signed in (ignore INITIAL_SESSION duplicates)
       if (session?.user) {
         const userId = session.user.id;
 
-        // Skip if this is a duplicate event for the same user
-        if (lastUserId === userId && event === 'INITIAL_SESSION') {
+        // Skip if this is a duplicate event for the same user who already has data loaded
+        if (lastUserId === userId && hasLoadedProfile) {
+          console.log('Skipping duplicate auth event - profile already loaded for this user');
+          return;
+        }
+
+        // Skip INITIAL_SESSION completely - we handle initial load in initializeAuth
+        if (event === 'INITIAL_SESSION') {
           return;
         }
 
         lastUserId = userId;
         setUser(session.user);
 
-        // Only reload profile/data if user actually changed
-        if (event === 'SIGNED_IN') {
+        // Only reload profile/data on actual SIGNED_IN event
+        if (event === 'SIGNED_IN' && !hasLoadedProfile) {
           await loadUserProfile(userId, client);
           await loadData(client);
+          hasLoadedProfile = true;
         }
       } else {
         lastUserId = null;
+        hasLoadedProfile = false;
         setUser(null);
         setProfile(null);
         setPages({});
@@ -153,8 +165,14 @@ export default function CompanyHub() {
       setProfile(data);
     } catch (error) {
       console.error('Error loading profile:', error);
-      // Set default profile so app doesn't get stuck
-      setProfile({ role: 'viewer', name: 'User', email: user?.email });
+      // Don't set default viewer profile - keep existing profile if we have one
+      // Only set default if this is the first load and we have no profile
+      if (!profile) {
+        console.warn('Failed to load profile on first attempt, setting temporary viewer profile');
+        setProfile({ role: 'viewer', name: 'User', email: user?.email });
+      } else {
+        console.warn('Failed to reload profile, keeping existing profile');
+      }
     }
   };
 
