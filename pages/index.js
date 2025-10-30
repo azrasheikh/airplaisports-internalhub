@@ -23,10 +23,40 @@ export default function CompanyHub() {
 
   const [activityLog, setActivityLog] = useState([]);
   const [versionHistory, setVersionHistory] = useState({});
-  const [pages, setPages] = useState({});
+  const [pages, setPages] = useState({
+    home: {
+      title: 'Welcome to Airplai Sports Hub',
+      parent: null,
+      components: [
+        { id: 1, type: 'heading', content: 'Welcome to the Team', level: 1 },
+        { id: 2, type: 'text', content: 'This is your central hub for all company documentation, resources, and information.' },
+        { id: 3, type: 'alert', content: 'Note: Some features may be limited until database connectivity is fully established.' }
+      ]
+    },
+    'getting-started': {
+      title: 'Getting Started',
+      parent: null,
+      components: [
+        { id: 1, type: 'heading', content: 'Getting Started Guide', level: 1 },
+        { id: 2, type: 'text', content: 'Welcome to Airplai Sports! Here you will find everything you need to get started.' }
+      ]
+    },
+    documentation: {
+      title: 'Documentation',
+      parent: null,
+      components: [
+        { id: 1, type: 'heading', content: 'Technical Documentation', level: 1 },
+        { id: 2, type: 'text', content: 'Find all technical documentation and resources here.' }
+      ]
+    }
+  });
   const [editComponents, setEditComponents] = useState([]);
   const [draggedComponent, setDraggedComponent] = useState(null);
-  const [navItems, setNavItems] = useState([]);
+  const [navItems, setNavItems] = useState([
+    { id: 'home', label: 'Home', icon: 'Home' },
+    { id: 'getting-started', label: 'Getting Started', icon: 'BookOpen' },
+    { id: 'documentation', label: 'Documentation', icon: 'FileText' }
+  ]);
 
   const iconOptions = { Home, BookOpen, FileText, Users, Settings, AlertCircle, Code, List };
 
