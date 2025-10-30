@@ -70,48 +70,34 @@ export default function CompanyHub() {
 
   // Initialize Supabase client and auth
   useEffect(() => {
-    console.log('[App] useEffect starting...');
-
-    // Initialize Supabase client only on client-side
     const client = createClient();
-    console.log('[App] Client created:', client ? 'SUCCESS' : 'NULL');
 
     if (!client) {
-      console.log('[App] No client, setting loading to false');
       setLoading(false);
       return;
     }
     setSupabase(client);
 
     const initializeAuth = async () => {
-      console.log('[App] Initializing auth...');
-
       // Ensure loading stops after max 15 seconds no matter what
       const maxLoadTime = setTimeout(() => {
-        console.log('[App] Max load time reached, stopping spinner');
+        console.warn('App initialization timeout reached');
         setLoading(false);
       }, 15000);
 
       try {
         const { data: { session } } = await client.auth.getSession();
-        console.log('[App] Session retrieved:', session ? 'HAS SESSION' : 'NO SESSION');
 
         if (session?.user) {
-          console.log('[App] User found:', session.user.email);
           setUser(session.user);
-
-          console.log('[App] Loading user profile...');
           await loadUserProfile(session.user.id, client);
-
-          console.log('[App] Loading data...');
           await loadData(client);
         }
 
         clearTimeout(maxLoadTime);
-        console.log('[App] Setting loading to false');
         setLoading(false);
       } catch (error) {
-        console.error('[App] Error in initializeAuth:', error);
+        console.error('Error initializing auth:', error);
         clearTimeout(maxLoadTime);
         setLoading(false);
       }
@@ -119,15 +105,28 @@ export default function CompanyHub() {
 
     initializeAuth();
 
-    // Listen for auth changes
+    // Listen for auth changes (but avoid duplicate loads)
+    let lastUserId = null;
     const { data: { subscription } } = client.auth.onAuthStateChange(async (event, session) => {
-      console.log('[App] Auth state changed:', event, session ? 'HAS SESSION' : 'NO SESSION');
-
+      // Only reload if user changed or signed in (ignore INITIAL_SESSION duplicates)
       if (session?.user) {
+        const userId = session.user.id;
+
+        // Skip if this is a duplicate event for the same user
+        if (lastUserId === userId && event === 'INITIAL_SESSION') {
+          return;
+        }
+
+        lastUserId = userId;
         setUser(session.user);
-        await loadUserProfile(session.user.id, client);
-        await loadData(client);
+
+        // Only reload profile/data if user actually changed
+        if (event === 'SIGNED_IN') {
+          await loadUserProfile(userId, client);
+          await loadData(client);
+        }
       } else {
+        lastUserId = null;
         setUser(null);
         setProfile(null);
         setPages({});
@@ -139,57 +138,32 @@ export default function CompanyHub() {
   }, []);
 
   const loadUserProfile = async (userId, client) => {
-    console.log('[App] loadUserProfile called for userId:', userId);
     const supabaseClient = client || supabase;
-    if (!supabaseClient) {
-      console.log('[App] No supabase client in loadUserProfile');
-      return;
-    }
-
-    console.log('[App] About to query profiles table...');
+    if (!supabaseClient) return;
 
     try {
-      const queryPromise = supabaseClient
+      const { data, error } = await supabaseClient
         .from('profiles')
         .select('*')
         .eq('id', userId)
         .single();
 
-      console.log('[App] Query created, awaiting response...');
-
-      // Add timeout to detect hanging requests
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('Profile query timeout after 10s')), 10000)
-      );
-
-      const { data, error } = await Promise.race([queryPromise, timeoutPromise]);
-
-      console.log('[App] Query response received, data:', data, 'error:', error);
-
       if (error) throw error;
-      console.log('[App] Profile loaded successfully:', data);
       setProfile(data);
     } catch (error) {
-      console.error('[App] Error loading profile:', error);
+      console.error('Error loading profile:', error);
       // Set default profile so app doesn't get stuck
       setProfile({ role: 'viewer', name: 'User', email: user?.email });
     }
   };
 
   const loadData = async (client) => {
-    console.log('[App] loadData called');
     const supabaseClient = client || supabase;
-    if (!supabaseClient) {
-      console.log('[App] No supabase client in loadData');
-      return;
-    }
+    if (!supabaseClient) return;
 
     try {
       // Load pages
-      console.log('[App] Loading pages...');
       const pagesData = await getAllPages(supabaseClient);
-      console.log('[App] Pages loaded:', pagesData.length, 'pages');
-
       const pagesMap = {};
       pagesData.forEach(page => {
         pagesMap[page.id] = {
@@ -202,10 +176,7 @@ export default function CompanyHub() {
       setPages(pagesMap);
 
       // Load navigation items
-      console.log('[App] Loading navigation items...');
       const navData = await getNavigationItems(supabaseClient);
-      console.log('[App] Navigation items loaded:', navData.length, 'items');
-
       setNavItems(navData.map(item => ({
         id: item.id,
         label: item.label,
@@ -213,20 +184,15 @@ export default function CompanyHub() {
       })));
 
       // Load activity logs
-      console.log('[App] Loading activity logs...');
       const logs = await getActivityLogs(supabaseClient);
-      console.log('[App] Activity logs loaded:', logs.length, 'logs');
-
       setActivityLog(logs.map(log => ({
         id: log.id,
         user: log.user_name,
         action: log.action,
         timestamp: new Date(log.created_at)
       })));
-
-      console.log('[App] loadData completed successfully');
     } catch (error) {
-      console.error('[App] Error loading data:', error);
+      console.error('Error loading data:', error);
     }
   };
 
