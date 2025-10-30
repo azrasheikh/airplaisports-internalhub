@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { FileText, Users, Settings, BookOpen, Home, Edit2, Save, X, Search, Type, List, AlertCircle, Code, Plus, ChevronRight, ChevronDown, Play, LogOut, History, Activity, Loader } from 'lucide-react';
+import { FileText, Users, Settings, BookOpen, Home, Edit2, Save, X, Search, Type, List, AlertCircle, Code, Plus, ChevronRight, ChevronDown, Play, LogOut, History, Activity, Loader, ExternalLink } from 'lucide-react';
 import { createClient } from '../lib/supabase/client';
 import { getAllPages, createPage, updatePage, getNavigationItems, createNavigationItem } from '../lib/db/pages';
 import { getActivityLogs, createActivityLog } from '../lib/db/activity';
@@ -65,7 +65,8 @@ export default function CompanyHub() {
     { type: 'text', label: 'Text', icon: FileText, default: { content: 'New text paragraph' } },
     { type: 'list', label: 'List', icon: List, default: { items: ['Item 1', 'Item 2'] } },
     { type: 'alert', label: 'Alert', icon: AlertCircle, default: { content: 'Important info' } },
-    { type: 'code', label: 'Code', icon: Code, default: { content: '// Code here' } }
+    { type: 'code', label: 'Code', icon: Code, default: { content: '// Code here' } },
+    { type: 'link', label: 'Link', icon: ExternalLink, default: { text: 'Click here', url: 'https://', newTab: true } }
   ];
 
   // Initialize Supabase client and auth
@@ -464,6 +465,20 @@ export default function CompanyHub() {
         );
       case 'code':
         return <pre className="mb-3 p-4 bg-black text-blue-300 rounded-lg overflow-x-auto border border-pink-500/30"><code>{c.content}</code></pre>;
+      case 'link':
+        return (
+          <div className="mb-3">
+            <a
+              href={c.url}
+              target={c.newTab ? '_blank' : '_self'}
+              rel={c.newTab ? 'noopener noreferrer' : ''}
+              className="inline-flex items-center gap-2 text-blue-400 hover:text-blue-300 underline"
+            >
+              {c.text}
+              {c.newTab && <ExternalLink size={16} />}
+            </a>
+          </div>
+        );
       default:
         return null;
     }
@@ -723,6 +738,40 @@ export default function CompanyHub() {
                             </div>
                           ))}
                           <button onClick={() => updateComponent(c.id, { items: [...(c.items || []), 'New item'] })} className="text-blue-400 text-sm">+ Add item</button>
+                        </div>
+                      )}
+                      {c.type === 'link' && (
+                        <div className="space-y-2">
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">Link Text</label>
+                            <input
+                              type="text"
+                              value={c.text || ''}
+                              onChange={(e) => updateComponent(c.id, { text: e.target.value })}
+                              placeholder="Click here"
+                              className="w-full p-2 bg-gray-900 border border-gray-600 rounded text-white"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs text-gray-400 mb-1">URL</label>
+                            <input
+                              type="text"
+                              value={c.url || ''}
+                              onChange={(e) => updateComponent(c.id, { url: e.target.value })}
+                              placeholder="https://example.com"
+                              className="w-full p-2 bg-gray-900 border border-gray-600 rounded text-white"
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              id={`newTab-${c.id}`}
+                              checked={c.newTab !== false}
+                              onChange={(e) => updateComponent(c.id, { newTab: e.target.checked })}
+                              className="w-4 h-4"
+                            />
+                            <label htmlFor={`newTab-${c.id}`} className="text-sm text-gray-300">Open in new tab</label>
+                          </div>
                         </div>
                       )}
                     </div>
