@@ -56,6 +56,12 @@ export default function CompanyHub() {
     const initializeAuth = async () => {
       console.log('[App] Initializing auth...');
 
+      // Ensure loading stops after max 15 seconds no matter what
+      const maxLoadTime = setTimeout(() => {
+        console.log('[App] Max load time reached, stopping spinner');
+        setLoading(false);
+      }, 15000);
+
       try {
         const { data: { session } } = await client.auth.getSession();
         console.log('[App] Session retrieved:', session ? 'HAS SESSION' : 'NO SESSION');
@@ -71,10 +77,12 @@ export default function CompanyHub() {
           await loadData(client);
         }
 
+        clearTimeout(maxLoadTime);
         console.log('[App] Setting loading to false');
         setLoading(false);
       } catch (error) {
         console.error('[App] Error in initializeAuth:', error);
+        clearTimeout(maxLoadTime);
         setLoading(false);
       }
     };
